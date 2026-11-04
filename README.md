@@ -25,7 +25,7 @@ finished the thought is the loudest bot tell there is, so each inbound pushes
 **Pace outbound.** Typing indicator, then a delay proportional to length. An
 instant reply to a paragraph is as robotic as a slow reply to `hey` is uncanny.
 
-**Saying nothing is a first-class outcome.** The sweep's default answer is *no*
+**Saying nothing is a first-class outcome.** The sweep's default answer is _no_
 and the agent has a `stay_quiet` tool. Restraint is the whole difference between
 a product people keep and one they mute.
 
@@ -34,18 +34,18 @@ a product people keep and one they mute.
 **Your cost driver is messages delivered, not tokens.** Roughly, per active user
 per month at ~15 exchanges/day:
 
-| Line item | Cost |
-|---|---|
-| Sonnet 5 chat turns (with prompt caching) | ~$2 |
-| Haiku background passes (dossier + sweep) | ~$0.30 |
-| SMS via Twilio | ~$7 |
-| **iMessage relay at ~$0.02/msg** | **~$18–27** |
-| Stripe on $19.99 | $0.88 |
+| Line item                                 | Cost        |
+| ----------------------------------------- | ----------- |
+| Sonnet 5 chat turns (with prompt caching) | ~$2         |
+| Haiku background passes (dossier + sweep) | ~$0.30      |
+| SMS via Twilio                            | ~$7         |
+| **iMessage relay at ~$0.02/msg**          | **~$18–27** |
+| Stripe on $19.99                          | $0.88       |
 
 A heavy user on a relay is cash-flow negative at $19.99. Two knobs in
 `config.limits` exist for exactly this: `maxBubblesPerReply` and
 `maxProactivePerDay`. Splitting one reply into three bubbles is what makes it
-feel human *and* triples delivery cost — that tension is the core product
+feel human _and_ triples delivery cost — that tension is the core product
 tradeoff and it's why the cap is a config value, not a constant.
 
 Model your **P90** user, not your average, before committing to the annual price.
@@ -82,23 +82,23 @@ than from a month of building the platform around it.
 
 ## Layout
 
-| Path | What |
-|---|---|
-| `src/agent/prompt.ts` | **The moat.** Voice rules, banned phrases, stage guidance. |
-| `src/agent/style.ts` | Derives texting style from the user's *own* messages. |
-| `src/agent/run.ts` | Agent loop, two cache breakpoints, bubble capping. |
-| `src/agent/tools.ts` | Goals, check-ins, facts, follow-ups, calendar, links. |
-| `src/memory/profile.ts` | Rolling dossier (memory layer 3). |
-| `src/channels/` | `Channel` interface + Sendblue (iMessage) and Twilio (SMS). |
-| `src/workers/` | Debounced turns, due follow-ups, nightly sweep. |
-| `src/onboarding.ts` | Funnel stages — advance on value delivered, never a timer. |
+| Path                    | What                                                        |
+| ----------------------- | ----------------------------------------------------------- |
+| `src/agent/prompt.ts`   | **The moat.** Voice rules, banned phrases, stage guidance.  |
+| `src/agent/style.ts`    | Derives texting style from the user's _own_ messages.       |
+| `src/agent/run.ts`      | Agent loop, two cache breakpoints, bubble capping.          |
+| `src/agent/tools.ts`    | Goals, check-ins, facts, follow-ups, calendar, links.       |
+| `src/memory/profile.ts` | Rolling dossier (memory layer 3).                           |
+| `src/channels/`         | `Channel` interface + Sendblue (iMessage) and Twilio (SMS). |
+| `src/workers/`          | Debounced turns, due follow-ups, nightly sweep.             |
+| `src/onboarding.ts`     | Funnel stages — advance on value delivered, never a timer.  |
 
 ## Prompt caching
 
 `PIPER_CORE` is byte-identical for every user, cached at 1h TTL, so **one cache
 entry serves the entire user base** at ~10% of input cost. Never interpolate
 anything into it — a single dynamic character invalidates it for everyone.
-Tool definitions render *before* the system prompt, so `TOOLS` must stay
+Tool definitions render _before_ the system prompt, so `TOOLS` must stay
 byte-stable too. Watch `cache_read_input_tokens` in the sim output; if it's 0
 across turns, something upstream is varying.
 
@@ -106,7 +106,7 @@ across turns, something upstream is varying.
 
 1. `messages` — raw log, append-only.
 2. `goals` / `checkins` / `facts` — structured entities the agent writes via
-   tools and references *by name*. This is what powers "how'd the thing with
+   tools and references _by name_. This is what powers "how'd the thing with
    your manager go" — the highest-value moment in the product.
 3. `users.profile_doc` — a compact dossier regenerated on Haiku every ~6h and
    injected into every prompt.
@@ -121,13 +121,13 @@ on both quality and cost. `search_history` covers the rare old-memory lookup.
 - **STOP / START / HELP** handled in code (`src/inbound.ts`), never by the model.
 - **AI disclosure**: California SB 1001 requires disclosing a bot when it's
   communicating to incentivize a purchase — which is exactly what onboarding
-  does. `PIPER_CORE` requires disclosure *before* any paywall pitch, in voice.
+  does. `PIPER_CORE` requires disclosure _before_ any paywall pitch, in voice.
   Don't fight this; "yeah i'm an ai, but i'm good at this" converts fine, and a
   late reveal costs more trust than the upfront line.
 - **Crisis handling**: `PIPER_CORE` drops the persona entirely for self-harm,
   abuse, and disordered-eating signals and routes to 988. An accountability
-  product *will* receive these messages.
-- **Google scope**: `calendar.events` only. It's a *sensitive* scope — OAuth
+  product _will_ receive these messages.
+- **Google scope**: `calendar.events` only. It's a _sensitive_ scope — OAuth
   verification is required past 100 users. **Start that now**; 2–6 weeks is a
   common launch blocker.
 

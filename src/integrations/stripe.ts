@@ -2,13 +2,18 @@ import Stripe from "stripe";
 import { config } from "../config.js";
 import type { User } from "../db/index.js";
 
-export const stripe = new Stripe(config.stripe.secretKey);
+let client: Stripe | undefined;
+/** Lazy: an unset key must not crash startup. Stripe is optional until there is something to sell. */
+export function stripe(): Stripe {
+  if (!config.stripe.secretKey) throw new Error("STRIPE_SECRET_KEY is not set");
+  return (client ??= new Stripe(config.stripe.secretKey));
+}
 
 export async function checkoutUrl(
   user: User,
   plan: "monthly" | "yearly",
 ): Promise<string> {
-  const session = await stripe.checkout.sessions.create({
+  const session = await stripe().checkout.sessions.create({
     mode: "subscription",
     line_items: [
       {

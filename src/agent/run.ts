@@ -69,6 +69,7 @@ export async function runAgent(
 
   const usage = { input: 0, output: 0, cacheRead: 0 };
   let quiet = false;
+  let retriedEmpty = false;
   let finalText = "";
 
   for (let i = 0; i < config.limits.maxAgentIterations; i++) {
@@ -110,6 +111,21 @@ export async function runAgent(
       .map((b) => b.text)
       .join("\n")
       .trim();
+
+    if (!finalText && response.stop_reason !== "tool_use") {
+      console.warn("[agent] empty reply", {
+        stop: response.stop_reason,
+        blocks: response.content.map((b) => b.type),
+        out: response.usage.output_tokens,
+      });
+      // The model occasionally ends a turn with thinking and no text. On a
+      // reply that must never become silence, so take one more pass with the
+      // same history before giving up. Proactive turns may legitimately be empty.
+      if (opts.trigger === "inbound" && !quiet && !retriedEmpty) {
+        retriedEmpty = true;
+        continue;
+      }
+    }
 
     if (response.stop_reason !== "tool_use") break;
 

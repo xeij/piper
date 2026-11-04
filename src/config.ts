@@ -30,6 +30,8 @@ export const config = {
       apiKey: opt("SENDBLUE_API_KEY"),
       apiSecret: opt("SENDBLUE_API_SECRET"),
       from: opt("SENDBLUE_FROM_NUMBER"),
+      // Set the same value as the webhook secret in the Sendblue dashboard.
+      webhookSecret: opt("SENDBLUE_WEBHOOK_SECRET"),
     },
     twilio: {
       accountSid: opt("TWILIO_ACCOUNT_SID"),

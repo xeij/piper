@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { timingSafeEqual } from "node:crypto";
 import { config, ACTIVATION_PHRASE } from "./config.js";
 import { sql, type User } from "./db/index.js";
 import { channel } from "./channels/index.js";
@@ -7,6 +8,11 @@ import { verifyLink } from "./web/links.js";
 import { consentUrl, oauthClient } from "./integrations/google.js";
 import { checkoutUrl, stripe } from "./integrations/stripe.js";
 import { landingPage, notice } from "./web/pages.js";
+
+export function secretMatches(given: unknown, expected: string): boolean {
+  if (typeof given !== "string" || given.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
 
 export function buildServer() {
   const app = Fastify({ logger: true });
@@ -34,6 +40,16 @@ export function buildServer() {
 
   // --- channel webhook -----------------------------------------------------
   app.post("/webhooks/inbound", async (req, reply) => {
+    // The URL is public. Without this, anyone who finds it can spoof an
+    // inbound text and make us reply to arbitrary numbers on our bill.
+    const secret = config.channel.sendblue.webhookSecret;
+    if (config.channel.provider === "sendblue" && secret) {
+      if (!secretMatches(req.headers["sb-signing-secret"], secret)) {
+        app.log.warn({ headers: Object.keys(req.headers) }, "webhook rejected: bad secret");
+        reply.code(401).send({ ok: false });
+        return;
+      }
+    }
     const msg = channel.parseWebhook(req.body);
     // 200 fast regardless — providers retry aggressively on anything else.
     reply.send({ ok: true });
@@ -103,7 +119,7 @@ export function buildServer() {
 
     let event;
     try {
-      event = stripe.webhooks.constructEvent(raw, sig as string, config.stripe.webhookSecret);
+      event = stripe().webhooks.constructEvent(raw, sig as string, config.stripe.webhookSecret);
     } catch (err) {
       app.log.error({ err }, "bad stripe signature");
       return reply.code(400).send("bad signature");

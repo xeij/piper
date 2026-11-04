@@ -13,6 +13,7 @@ const { splitBubbles } = await import("./agent/run.js");
 const { inQuietHours, localHour } = await import("./outbound/send.js");
 const { createLink, verifyLink } = await import("./web/links.js");
 const { landingPage } = await import("./web/pages.js");
+const { secretMatches } = await import("./server.js");
 
 let fail = 0;
 const ok = (name: string, cond: boolean, extra?: unknown) => {
@@ -57,6 +58,12 @@ ok("valid token verifies", verifyLink(token)?.uid === "user-abc");
 ok("tampered payload rejected", verifyLink("eyJ1aWQiOiJoYWNrZXIifQ." + token.split(".")[1]) === null);
 ok("tampered signature rejected", verifyLink(token.split(".")[0] + ".AAAA") === null);
 ok("garbage rejected", verifyLink("nonsense") === null);
+
+// --- webhook secret: a near-miss or a missing header must not pass ---
+ok("webhook secret matches", secretMatches("abc123", "abc123"));
+ok("webhook secret wrong rejected", !secretMatches("abc124", "abc123"));
+ok("webhook secret length mismatch rejected", !secretMatches("abc12", "abc123"));
+ok("webhook secret missing header rejected", !secretMatches(undefined, "abc123"));
 ok(
   "expired token rejected",
   verifyLink(new URL(createLink("u", "calendar", -1)).searchParams.get("t")!) === null,
