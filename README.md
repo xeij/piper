@@ -1,15 +1,11 @@
 # piper
 
-An AI accountability partner that lives in iMessage. Text it what you're
-working on, and it remembers, checks in when it matters, and talks like a
-friend instead of an app.
+A personal AI accountability partner that lives in iMessage. Text it what
+you're working on, and it remembers, checks in when it matters, and talks like
+a friend instead of an app.
 
-**Text +1 (808) 319-9759** to get your own piper, or
-**[open it in Messages](https://34-73-159-213.sslip.io)** from your phone.
-
-There's no app to download and no account to make. Your first text is the
-signup, and from then on piper is yours: its own memory of you, your goals and
-the people in your life, kept separate from everyone else's.
+Piper runs as its author's personal agent: no app, no dashboard, just a thread
+in Messages that remembers goals, plans and the people in them.
 
 ## What it's like
 
@@ -32,7 +28,6 @@ the people in your life, kept separate from everyone else's.
   that's gone quiet. Otherwise it stays out of your messages.
 - Adapts to how you text: length, capitalization, emoji.
 - Puts plans on your Apple or Google Calendar.
-- First 12 messages are free, then it's a monthly subscription through Stripe.
 
 ## How it's built
 
@@ -44,12 +39,14 @@ your iPhone ──iMessage──▶ Sendblue ──▶ piper server ──▶ Cl
 ```
 
 TypeScript on Node, Fastify, Postgres on Supabase, Claude (Anthropic), Sendblue
-for iMessage, Stripe for billing. It runs as a single service on a small Linux
-VM.
+for iMessage. It runs as a single service on a small Linux VM. The design
+supports multiple users, each with separate memory, and includes Stripe billing,
+but it is deployed for one person.
 
 ## Status
 
-Live over iMessage. Billing and calendar sync are built and in testing.
+In personal use over iMessage. Calendar sync and billing are built; billing
+is not in use.
 
 ## Running it locally
 
