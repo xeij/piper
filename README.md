@@ -4,7 +4,12 @@ An AI accountability partner that lives in iMessage. Text it what you're
 working on, and it remembers, checks in when it matters, and talks like a
 friend instead of an app.
 
-No app to download and no account to make. The first text is the signup.
+**Text +1 (808) 319-9759** to get your own piper, or
+**[open it in Messages](https://34-73-159-213.sslip.io)** from your phone.
+
+There's no app to download and no account to make. Your first text is the
+signup, and from then on piper is yours: its own memory of you, your goals and
+the people in your life, kept separate from everyone else's.
 
 ## What it's like
 
@@ -44,8 +49,7 @@ VM.
 
 ## Status
 
-Working end to end over iMessage and in testing with a small group. Billing and
-calendar sync are built and being tested before a public launch.
+Live over iMessage. Billing and calendar sync are built and in testing.
 
 ## Running it locally
 
