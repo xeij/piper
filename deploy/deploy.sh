@@ -12,7 +12,9 @@ HOST=${1:?usage: deploy/deploy.sh <ssh-host>}
 cd "$(dirname "$0")/.."
 [ -f .env.production ] || { echo "missing .env.production" >&2; exit 1; }
 
+# Compile here: tsc needs more memory than a 1 GB VM has, and the output is plain JS.
+npm run build --silent
 ssh "$HOST" 'command -v rsync >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq rsync; }'
-rsync -az --delete --exclude node_modules --exclude dist --exclude .git --exclude '.env*' ./ "$HOST:piper/"
+rsync -az --delete --exclude node_modules --exclude .git --exclude '.env*' ./ "$HOST:piper/"
 scp -q .env.production "$HOST:piper/.env"
 ssh "$HOST" 'chmod 600 piper/.env && bash piper/deploy/remote.sh'

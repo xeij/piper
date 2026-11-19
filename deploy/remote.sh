@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Runs on the VM (Ubuntu 22.04/24.04). Installs Node and Caddy once, then
-# rebuilds and restarts the service. Caddy gets the HTTPS cert automatically.
+# installs runtime deps for the dist/ that deploy.sh built and restarts. Caddy gets the HTTPS cert automatically.
 set -euo pipefail
 cd ~/piper
 
 DOMAIN=$(grep '^PUBLIC_BASE_URL=' .env | cut -d= -f2- | sed -E 's#^https?://##; s#/.*##')
 [ -n "$DOMAIN" ] || { echo "PUBLIC_BASE_URL not set in .env" >&2; exit 1; }
 
-# Oracle's 1 GB micro shape can't run tsc without swap.
+# Headroom for 1 GB VMs (GCP e2-micro, Oracle E2.1.Micro).
 if [ ! -f /swapfile ] && [ "$(free -m | awk '/Mem:/{print $2}')" -lt 2000 ]; then
   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
   sudo mkswap /swapfile >/dev/null && sudo swapon /swapfile
@@ -29,15 +29,14 @@ if ! command -v caddy >/dev/null; then
 fi
 
 # Oracle's Ubuntu images reject all inbound traffic except SSH at the host
-# firewall, on top of the cloud security list.
-for port in 80 443; do
+# firewall, on top of the cloud security list. Other clouds ship no iptables.
+command -v iptables >/dev/null && for port in 80 443; do
   sudo iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null \
     || sudo iptables -I INPUT -p tcp --dport "$port" -j ACCEPT
 done
 sudo netfilter-persistent save >/dev/null 2>&1 || true
 
-npm ci --no-audit --no-fund
-npm run build
+npm ci --omit=dev --no-audit --no-fund
 
 sudo tee /etc/systemd/system/piper.service >/dev/null <<EOF
 [Unit]
