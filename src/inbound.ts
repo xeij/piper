@@ -65,7 +65,7 @@ export async function handleInbound(msg: InboundMessage): Promise<void> {
   if (HELP_WORDS.has(word)) {
     await channel.send(
       user.phone,
-      "piper — an ai that helps you stay on your goals over text. reply STOP to opt out. support@piper.app",
+      "piper, an ai that helps you stay on your goals over text. reply STOP to opt out. support@piper.app",
     );
     return;
   }

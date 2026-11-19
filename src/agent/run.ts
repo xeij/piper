@@ -100,7 +100,7 @@ export async function runAgent(
       // Rare, but must not become silence — the product promise is that it
       // always replies.
       return {
-        bubbles: ["sorry — i can't get into that one. what else is going on?"],
+        bubbles: ["sorry, i can't get into that one. what else is going on?"],
         quiet: false,
         usage,
       };
@@ -164,8 +164,17 @@ export async function runAgent(
  * it knows better than a heuristic where a text should break, and each extra
  * bubble is real delivery cost.
  */
+// The prompt forbids these, but the model still slips; texts must never carry them.
+export function scrubAiTells(text: string): string {
+  return text
+    .replace(/[ \t]*[—–][ \t]*/g, ", ")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^[ \t]*(#+|[-*•]|\d+\.)[ \t]+/gm, "")
+    .replace(/^, |, $/gm, "");
+}
+
 export function splitBubbles(text: string): string[] {
-  const parts = text
+  const parts = scrubAiTells(text)
     .split(/\n\s*\n/)
     .map((s) => s.replace(/\s+$/g, "").trim())
     .filter(Boolean);

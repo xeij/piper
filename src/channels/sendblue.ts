@@ -5,7 +5,7 @@ import type { Channel, InboundMessage } from "./types.js";
 // NOTE: relays operate against Apple's ToS — numbers can be burned with no
 // notice. Everything here sits behind the Channel interface precisely so
 // `CHANNEL_PROVIDER=twilio` is a one-line migration of the whole user base.
-const BASE = "https://api.sendblue.co/api";
+const BASE = "https://api.sendblue.com/api";
 
 function headers() {
   return {

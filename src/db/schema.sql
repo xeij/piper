@@ -7,7 +7,7 @@ create table if not exists users (
   phone               text unique not null,
   channel             text not null default 'sms',        -- 'imessage' | 'sms'
   display_name        text,
-  timezone            text not null default 'America/New_York',
+  timezone            text not null default 'Europe/Madrid',
 
   -- funnel
   onboarding_stage    text not null default 'new',        -- new | discovering | calendar_pitched | paywalled | active

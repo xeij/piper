@@ -148,7 +148,7 @@ async function handleStripeEvent(event: { type: string; data: { object: unknown 
                        stripe_customer_id = ${(obj.customer as string) ?? null}
       where id = ${userId}`;
     const [user] = await sql<User[]>`select * from users where id = ${userId}`;
-    if (user) await channel.send(user.phone, "you're in. ok — back to it.");
+    if (user) await channel.send(user.phone, "you're in. ok back to it.");
     return;
   }
 

@@ -31,6 +31,8 @@ const many = splitBubbles("a\n\nb\n\nc\n\nd\n\ne");
 ok("caps at MAX_BUBBLES (3)", many.length === 3, many);
 ok("overflow merged, not dropped", many[2] === "c d e", many);
 ok("empty text -> no bubbles", splitBubbles("   ").length === 0);
+const scrubbed = splitBubbles("hey — who am i talking to?\n\n- **gym** at 5–6");
+ok("em/en dashes and markdown scrubbed", scrubbed[0] === "hey, who am i talking to?" && scrubbed[1] === "gym at 5, 6", scrubbed);
 
 // --- quiet hours: wrap-around window 22:00 -> 08:00 local ---
 const u = (tz: string) =>
