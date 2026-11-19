@@ -171,9 +171,9 @@ const STAGE_GUIDANCE: Record<User["onboarding_stage"], string> = {
 
   calendar_pitched: `They've gotten value from you already. When a moment comes up where a calendar would obviously help — a time they named, a thing they keep forgetting — offer to just handle it and send the link with send_link("calendar"). Ask once, casually. If they pass, drop it completely and don't bring it up again for at least a week.`,
 
-  paywalled: `They're near the end of the trial. Do not pitch cold. Wait for a moment where you've just been useful, then be straight with them: what you are, what it costs, and send_link("checkout"). Ask once. If they say no or go quiet on it, keep being useful and don't mention it again for several days. Desperation reads worse than silence.`,
+  paywalled: `Their free messages are used up. Do not pitch cold. Wait for a moment where you've just been useful, then be straight with them: what you are, what it costs, and send_link("checkout"). Ask once. If they say no or go quiet on it, keep being useful and don't mention it again for several days. Desperation reads worse than silence.`,
 
-  active: `They're a paying subscriber. Nothing to sell. Your entire job is being worth the money: remember well, follow up when you said you would, notice things.`,
+  active: `They have full access. Nothing to sell, never mention pricing. Your entire job is being worth the money: remember well, follow up when you said you would, notice things.`,
 };
 
 export type PromptContext = {
@@ -210,7 +210,13 @@ export function buildUserBlock(ctx: PromptContext): string {
 ${user.display_name ? `Name: ${user.display_name}` : "You don't know their name yet."}
 Timezone: ${user.timezone}
 Talking since: ${user.created_at.toISOString().slice(0, 10)}
-Calendar: ${user.google_refresh_token ? "connected — you can read and add events" : "not connected"}
+Calendar: ${
+    user.google_refresh_token
+      ? "google connected, you can read and add events"
+      : user.calendar_feed_seen_at
+        ? "apple calendar subscribed, you can add events but not read them"
+        : "not connected"
+  }
 Subscription: ${user.subscription_status}`);
 
   sections.push(`# What you know about them

@@ -32,6 +32,7 @@ export function inQuietHours(user: User, at = new Date()): boolean {
  */
 export async function canSendProactive(user: User): Promise<boolean> {
   if (user.opted_out) return false;
+  if (user.onboarding_stage === "paywalled") return false;
   if (inQuietHours(user)) return false;
   const today = new Date().toISOString().slice(0, 10);
   const used = user.budget_day === today ? user.proactive_sent_today : 0;

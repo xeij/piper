@@ -32,6 +32,17 @@ ok("caps at MAX_BUBBLES (3)", many.length === 3, many);
 ok("overflow merged, not dropped", many[2] === "c d e", many);
 ok("empty text -> no bubbles", splitBubbles("   ").length === 0);
 const scrubbed = splitBubbles("hey — who am i talking to?\n\n- **gym** at 5–6");
+const { paywallState } = await import("./onboarding.js");
+ok("paywall: free under limit", paywallState(11, false) === "free");
+ok("paywall: pitch at limit", paywallState(12, false) === "pitch");
+ok("paywall: gate after grace", paywallState(16, false) === "gate");
+ok("paywall: access never gated", paywallState(500, true) === "free");
+const ical = await import("./integrations/ical.js");
+const ft = ical.feedToken("abc-123");
+ok("feed token verifies", ical.verifyFeedToken(ft) === "abc-123");
+ok("forged feed token rejected", ical.verifyFeedToken("other-uid." + ft.split(".")[1]) === null);
+const ics = ical.renderIcs([{ id: 1, title: "gym, legs; day", notes: null, starts_at: new Date("2026-01-15T07:00:00Z"), ends_at: new Date("2026-01-15T08:00:00Z"), created_at: new Date("2026-01-14T00:00:00Z") }]);
+ok("ics escapes and uses UTC stamps", ics.includes("SUMMARY:gym\\, legs\\; day") && ics.includes("DTSTART:20260115T070000Z") && ics.includes("\r\n"), ics);
 ok("em/en dashes and markdown scrubbed", scrubbed[0] === "hey, who am i talking to?" && scrubbed[1] === "gym at 5, 6", scrubbed);
 
 // --- quiet hours: wrap-around window 22:00 -> 08:00 local ---
@@ -54,7 +65,7 @@ ok("hour 0 normalizes, not 24", localHour(u("UTC"), at("2026-01-15T00:30:00Z")) 
 // --- signed magic links ---
 const link = createLink("user-abc", "calendar", 60);
 const token = new URL(link).searchParams.get("t")!;
-ok("calendar link routes to /connect/google", link.includes("/connect/google"));
+ok("calendar link routes to /connect/calendar", link.includes("/connect/calendar"));
 ok("checkout link routes to /subscribe", createLink("u", "checkout").includes("/subscribe"));
 ok("valid token verifies", verifyLink(token)?.uid === "user-abc");
 ok("tampered payload rejected", verifyLink("eyJ1aWQiOiJoYWNrZXIifQ." + token.split(".")[1]) === null);

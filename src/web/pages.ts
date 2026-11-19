@@ -34,7 +34,7 @@ export function landingPage(): string {
     `<h1>piper</h1>
      <p>the friend who actually remembers what you said you'd do.</p>
      <a class="cta" id="cta" href="sms:${NUMBER}&body=${encoded}">text piper</a>
-     <small>an ai, over text. $19.99/mo or $9.99/mo billed yearly, after a free trial.
+     <small>an ai, over text. first ${config.limits.freeMessages} messages free, then $19.99/mo or $9.99/mo billed yearly.
      msg &amp; data rates may apply. reply STOP to opt out.</small>
      <script>
        var a = document.getElementById('cta');
@@ -42,6 +42,18 @@ export function landingPage(): string {
          a.href = "sms:${NUMBER}?body=${encoded}";
        }
      </script>`,
+  );
+}
+
+export function calendarChooser(appleUrl: string, googleUrl: string | null): string {
+  return shell(
+    "connect your calendar",
+    `<h1>which calendar?</h1>
+     <p>piper will add things it sets up with you straight to your calendar.</p>
+     <p><a class="cta" href="${appleUrl}">apple calendar</a></p>
+     ${googleUrl ? `<p><a class="cta" href="${googleUrl}">google calendar</a></p>` : ""}
+     <small>apple adds a "piper" calendar you can see on every device. google also lets
+     piper see what's already on your schedule.</small>`,
   );
 }
 

@@ -1,54 +1,53 @@
 import { config } from "./config.js";
 import { sql, type User } from "./db/index.js";
 
-/**
- * Funnel stages advance on evidence of value delivered, never on a timer alone.
- * Asking for calendar access or money before you've been useful is the fastest
- * way to lose someone who is one tap from deleting the thread.
- */
-export async function advanceStage(user: User): Promise<User["onboarding_stage"]> {
-  const stage = user.onboarding_stage;
-  if (stage === "active") return stage;
-
-  if (user.subscription_status === "active") {
-    await setStage(user.id, "active");
-    return "active";
-  }
-
-  const [counts] = await sql<{ inbound: number; goals: number }[]>`
-    select
-      (select count(*)::int from messages where user_id = ${user.id} and direction = 'in') as inbound,
-      (select count(*)::int from goals where user_id = ${user.id} and status = 'active') as goals`;
-
-  const inbound = counts?.inbound ?? 0;
-  const goals = counts?.goals ?? 0;
-  const ageDays = (Date.now() - user.created_at.getTime()) / 86400000;
-
-  let next = stage;
-
-  if (stage === "new" && inbound >= 1) next = "discovering";
-
-  // Only pitch the calendar once there's a real goal to hang it on.
-  if (next === "discovering" && goals >= 1 && inbound >= 8) next = "calendar_pitched";
-
-  // Paywall lands near the end of the trial, after several days of use.
-  if (
-    next === "calendar_pitched" &&
-    (ageDays >= config.limits.trialDays - 1 || inbound >= 25)
-  ) {
-    next = "paywalled";
-  }
-
-  if (next !== stage) {
-    await setStage(user.id, next);
-    if (next === "discovering" && !user.trial_ends_at) {
-      await sql`update users set trial_ends_at = now() + (${config.limits.trialDays} || ' days')::interval
-                where id = ${user.id}`;
-    }
-  }
-  return next;
+/** Paying subscribers and numbers listed in FREE_PHONES never see the paywall. */
+export function hasAccess(user: Pick<User, "phone" | "subscription_status">): boolean {
+  return (
+    user.subscription_status === "active" ||
+    user.subscription_status === "trialing" ||
+    config.limits.freePhones.includes(user.phone)
+  );
 }
 
-async function setStage(userId: string, stage: User["onboarding_stage"]) {
-  await sql`update users set onboarding_stage = ${stage} where id = ${userId}`;
+/**
+ * Pure paywall decision from the count of messages they've sent.
+ * - free:  under FREE_MESSAGES, normal conversation
+ * - pitch: free messages used up; the agent still replies and asks them to subscribe, in voice
+ * - gate:  past the grace window; code answers with the checkout link and the model isn't called
+ */
+export function paywallState(inbound: number, access: boolean): "free" | "pitch" | "gate" {
+  if (access) return "free";
+  if (inbound > config.limits.freeMessages + config.limits.paywallGrace) return "gate";
+  if (inbound >= config.limits.freeMessages) return "pitch";
+  return "free";
+}
+
+export async function inboundCount(userId: string): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`
+    select count(*)::int as n from messages where user_id = ${userId} and direction = 'in'`;
+  return row?.n ?? 0;
+}
+
+/**
+ * Stage is recomputed from evidence on every inbound, so a lapsed subscription
+ * drops back to the paywall on its own. Calendar is pitched only once there is
+ * a real goal to hang it on.
+ */
+export async function advanceStage(user: User): Promise<User["onboarding_stage"]> {
+  const [counts] = await sql<{ goals: number }[]>`
+    select count(*)::int as goals from goals where user_id = ${user.id} and status = 'active'`;
+  const inbound = await inboundCount(user.id);
+  const goals = counts?.goals ?? 0;
+
+  let next: User["onboarding_stage"] = "new";
+  if (hasAccess(user)) next = "active";
+  else if (paywallState(inbound, false) !== "free") next = "paywalled";
+  else if (goals >= 1 && inbound >= 6) next = "calendar_pitched";
+  else if (inbound >= 1) next = "discovering";
+
+  if (next !== user.onboarding_stage) {
+    await sql`update users set onboarding_stage = ${next} where id = ${user.id}`;
+  }
+  return next;
 }

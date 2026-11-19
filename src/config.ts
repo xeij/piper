@@ -16,7 +16,7 @@ function num(name: string, fallback: number): number {
 export const config = {
   databaseUrl: req("DATABASE_URL"),
   publicBaseUrl: opt("PUBLIC_BASE_URL", "http://localhost:3000"),
-  linkSigningSecret: opt("LINK_SIGNING_SECRET", "dev-secret-change-me"),
+  linkSigningSecret: req("LINK_SIGNING_SECRET"),
 
   // Sonnet 5 for the conversational loop; Haiku for cheap background passes.
   models: {
@@ -59,7 +59,12 @@ export const config = {
     // knobs that keep a heavy user from going cash-flow negative.
     maxBubblesPerReply: num("MAX_BUBBLES_PER_REPLY", 3),
     maxProactivePerDay: num("MAX_PROACTIVE_PER_DAY", 4),
-    trialDays: num("TRIAL_DAYS", 5),
+    // Messages a new number can send before the agent starts asking them to
+    // subscribe, then how many more before code takes over with the link.
+    freeMessages: num("FREE_MESSAGES", 12),
+    paywallGrace: num("PAYWALL_GRACE", 3),
+    // Comma-separated E.164 numbers that are never charged (the owner).
+    freePhones: opt("FREE_PHONES").split(",").map((s) => s.trim()).filter(Boolean),
     // Wait this long after the last inbound before running a turn, so a
     // burst of short texts is treated as one thought.
     debounceMs: num("DEBOUNCE_MS", 3000),

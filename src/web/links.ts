@@ -29,7 +29,7 @@ export function createLink(
   };
   const body = b64url(JSON.stringify(payload));
   const token = `${body}.${sign(body)}`;
-  const path = kind === "calendar" ? "/connect/google" : "/subscribe";
+  const path = kind === "calendar" ? "/connect/calendar" : "/subscribe";
   return `${config.publicBaseUrl}${path}?t=${token}`;
 }
 

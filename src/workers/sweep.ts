@@ -43,7 +43,7 @@ export async function runNightlySweep(): Promise<void> {
       extract(day from now() - u.last_inbound_at)::int as days_since
     from users u
     where u.opted_out = false
-      and u.onboarding_stage <> 'new'
+      and u.onboarding_stage not in ('new', 'paywalled')
       and (u.last_outbound_at is null or u.last_outbound_at < now() - interval '20 hours')
       and exists (select 1 from goals g where g.user_id = u.id and g.status = 'active')
       -- don't pile a sweep on top of a follow-up the agent already scheduled

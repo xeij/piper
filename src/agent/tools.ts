@@ -90,7 +90,8 @@ export const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "check_calendar",
-    description: "Read their upcoming calendar events. Only works if calendar is connected.",
+    description:
+      "Read their upcoming calendar events. Only works with Google Calendar; an Apple Calendar subscription only lets you add events, not read them.",
     input_schema: {
       type: "object",
       properties: { days: { type: "number", description: "How many days ahead. Default 7." } },
@@ -101,7 +102,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "add_calendar_event",
     description:
-      "Put something on their calendar. Just do it when it's obviously wanted; don't ask permission for something they already asked for.",
+      "Put something on their calendar (Google, or their piper calendar feed in Apple Calendar). Works before they connect too: the event shows up once they subscribe. Just do it when it's obviously wanted; don't ask permission for something they already asked for.",
     input_schema: {
       type: "object",
       properties: {
@@ -117,7 +118,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "send_link",
     description:
-      "Get a personal link to send them: 'calendar' to connect Google Calendar, 'checkout' to subscribe. Returns the URL — you still have to write the message around it.",
+      "Get a personal link to send them: 'calendar' to connect Apple or Google Calendar (they pick on the page), 'checkout' to subscribe. Returns the URL — you still have to write the message around it.",
     input_schema: {
       type: "object",
       properties: {
@@ -216,20 +217,31 @@ export async function executeTool(
 
     case "check_calendar": {
       const events = await listUpcoming(user, Number(input.days ?? 7));
-      if (events === null) return { text: "calendar isn't connected" };
+      if (events === null) {
+        return { text: "can't read their calendar (only Google Calendar allows that). you can still add events." };
+      }
       if (!events.length) return { text: "nothing on the calendar in that window" };
       return { text: events.map((e) => `${e.start} — ${e.title}`).join("\n") };
     }
 
     case "add_calendar_event": {
-      const created = await createEvent(user, {
-        title: String(input.title),
-        startIso: String(input.start),
-        endIso: String(input.end),
-        notes: input.notes as string | undefined,
-      });
-      if (created === null) return { text: "calendar isn't connected" };
-      return { text: "added to their calendar" };
+      const start = new Date(String(input.start));
+      const end = new Date(String(input.end));
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        return { text: "start/end didn't parse or end is before start. send ISO 8601 with an offset" };
+      }
+      const notes = (input.notes as string | undefined) ?? null;
+      if (user.google_refresh_token) {
+        await createEvent(user, { title: String(input.title), startIso: start.toISOString(), endIso: end.toISOString(), notes: notes ?? undefined });
+        return { text: "added to their google calendar" };
+      }
+      await sql`insert into calendar_events (user_id, title, notes, starts_at, ends_at)
+                values (${user.id}, ${String(input.title)}, ${notes}, ${start}, ${end})`;
+      return {
+        text: user.calendar_feed_seen_at
+          ? "added to their piper calendar (shows up in apple calendar within ~15 min)"
+          : "saved. it'll show on their calendar once they connect it with send_link('calendar')",
+      };
     }
 
     case "send_link": {

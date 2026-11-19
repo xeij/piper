@@ -9,12 +9,11 @@ Anthropic SDK, Sendblue for iMessage (Twilio for SMS).
 
 ## Status
 
-Personal project, running end to end for a single user: real iMessages arrive
-through Sendblue, the agent replies, and follow-ups fire on schedule. Code for
-Stripe billing, Google Calendar, and the Twilio SMS fallback exists but has not
-been exercised against live accounts. The memory dossier is not yet
-regenerated on the live path (see Memory). There is no deployment; the server runs
-locally behind a Cloudflare quick tunnel.
+Early. Real iMessages flow end to end through Sendblue for a small number of
+testers. The message-count paywall, Stripe checkout and the Apple Calendar feed
+are implemented and covered by self-tests, but have not yet run against live
+Stripe payments or a public user base. The Twilio SMS fallback and Google
+Calendar OAuth have not been exercised against live accounts.
 
 ## Quickstart
 
@@ -38,7 +37,27 @@ With Supabase, use the **session pooler** connection string (port 5432). The
 direct connection is IPv6-only and the transaction pooler breaks prepared
 statements.
 
-### Real iMessage
+### Deploying
+
+The server is one long-running Node process: the webhook server plus three
+polling workers (debounced turns, due follow-ups, the sweep). It needs a host
+that keeps it running continuously, not one that sleeps it when idle. It runs on
+Railway from this repo with no extra config: the build runs `npm run build`, the
+start command is `npm start`, and the health check is `/health`. Workers claim
+jobs with `FOR UPDATE SKIP LOCKED`, so more than one instance is safe.
+
+Required env vars: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `LINK_SIGNING_SECRET`
+(32+ random bytes), `PUBLIC_BASE_URL` (the deployed HTTPS URL),
+`CHANNEL_PROVIDER`, the `SENDBLUE_*` values, and for billing `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`. The
+Stripe webhook points at `<PUBLIC_BASE_URL>/webhooks/stripe` and needs
+`checkout.session.completed` and `customer.subscription.*` events. Run
+`npm run db:push` against the production database once per schema change.
+
+On Sendblue's free plan, only verified contacts can talk to the number. Opening
+it to the public requires a paid Sendblue line.
+
+### Real iMessage (local)
 
 1. Fill in `SENDBLUE_API_KEY`, `SENDBLUE_API_SECRET` and `SENDBLUE_FROM_NUMBER`
    from the Sendblue dashboard, and set `SENDBLUE_WEBHOOK_SECRET` to any random
@@ -89,9 +108,9 @@ texts.
 1. `messages`: raw append-only log.
 2. `goals`, `checkins`, `facts`: structured rows the agent writes through tools
    and refers to by name ("how'd the thing with your manager go").
-3. `users.profile_doc`: a compact dossier Haiku rewrites from recent
-   conversation, injected into each prompt. Regeneration is currently triggered
-   only by the simulator; the live server does not schedule it yet.
+3. `users.profile_doc`: a compact dossier Haiku rewrites from the last 80
+   messages, at most every 6 hours, after a reply has gone out. It is injected
+   into every prompt.
 
 There is no vector store. The context this product needs is almost always
 recent and salient rather than semantically similar, so a dossier beats
@@ -114,6 +133,28 @@ than the model calls do. Splitting a reply into bubbles makes it read as human
 and multiplies delivery cost, which is why bubble count and proactive sends per
 day are config values (`MAX_BUBBLES_PER_REPLY`, `MAX_PROACTIVE_PER_DAY`) rather
 than constants.
+
+### Paywall
+
+Billing is by usage, not time. Each number gets `FREE_MESSAGES` texts (default
+12) of normal conversation. After that the onboarding stage flips to
+`paywalled` and the agent asks them to subscribe, in its own voice, with a
+signed Stripe Checkout link. After `PAYWALL_GRACE` more texts, replies come from
+code instead (just the link), so a non-paying user costs one delivery per text
+and no model calls. Proactive texts stop at the paywall. Numbers in
+`FREE_PHONES` never pay. Stage is recomputed on every inbound, so a lapsed
+subscription returns to the paywall on its own.
+
+### Calendar
+
+iCloud has no OAuth API, and asking people to text an app-specific password is
+not acceptable, so Apple Calendar support is a subscription feed. Each user
+gets a private `webcal://…/cal/<uid>.<hmac>.ics` URL; events the agent creates
+go into `calendar_events` and appear in the user's Calendar app. The tradeoff is
+that the feed is one-way (Piper can add events but not read the user's schedule),
+and Apple controls how often it re-fetches the feed. Google Calendar is offered
+alongside it through OAuth with the `calendar.events` scope, which also allows
+reading. The first fetch of the feed confirms the connection in the text thread.
 
 ### Channels
 
@@ -138,10 +179,11 @@ without notice, so the SMS path exists as a one-variable fallback.
 | `src/agent/prompt.ts`   | Voice rules, banned phrases, onboarding stage guidance      |
 | `src/agent/run.ts`      | Agent loop, cache breakpoints, bubble splitting and scrubbing |
 | `src/agent/tools.ts`    | Goals, check-ins, facts, follow-ups, calendar, links        |
+| `src/onboarding.ts`     | Stage machine and paywall decision                          |
+| `src/integrations/`     | Stripe Checkout, Google Calendar, Apple Calendar `.ics` feed |
 | `src/agent/style.ts`    | Texting style derived from the user's own messages          |
 | `src/memory/profile.ts` | Dossier regeneration                                        |
 | `src/channels/`         | `Channel` interface, Sendblue and Twilio implementations    |
 | `src/workers/`          | Debounced turns, due follow-ups, nightly sweep              |
-| `src/onboarding.ts`     | Funnel stages, advanced by value delivered rather than time |
 | `src/db/schema.sql`     | Full schema                                                 |
 | `src/sim.ts`            | Terminal simulator                                          |

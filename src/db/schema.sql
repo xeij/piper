@@ -111,3 +111,19 @@ create table if not exists processed_events (
   id         text primary key,
   created_at timestamptz not null default now()
 );
+
+-- Events Piper adds for users without Google Calendar. Served to Apple
+-- Calendar (or anything else) as a per-user subscription feed.
+create table if not exists calendar_events (
+  id         bigserial primary key,
+  user_id    uuid not null references users(id) on delete cascade,
+  title      text not null,
+  notes      text,
+  starts_at  timestamptz not null,
+  ends_at    timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists calendar_events_user_idx on calendar_events (user_id, starts_at);
+
+-- Set the first time a calendar app fetches the feed, i.e. they subscribed.
+alter table users add column if not exists calendar_feed_seen_at timestamptz;

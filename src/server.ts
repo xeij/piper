@@ -7,7 +7,8 @@ import { handleInbound } from "./inbound.js";
 import { verifyLink } from "./web/links.js";
 import { consentUrl, oauthClient } from "./integrations/google.js";
 import { checkoutUrl, stripe } from "./integrations/stripe.js";
-import { landingPage, notice } from "./web/pages.js";
+import { calendarChooser, landingPage, notice } from "./web/pages.js";
+import { feedUrl, renderIcs, verifyFeedToken } from "./integrations/ical.js";
 
 export function secretMatches(given: unknown, expected: string): boolean {
   if (typeof given !== "string" || given.length !== expected.length) return false;
@@ -43,8 +44,8 @@ export function buildServer() {
     // The URL is public. Without this, anyone who finds it can spoof an
     // inbound text and make us reply to arbitrary numbers on our bill.
     const secret = config.channel.sendblue.webhookSecret;
-    if (config.channel.provider === "sendblue" && secret) {
-      if (!secretMatches(req.headers["sb-signing-secret"], secret)) {
+    if (config.channel.provider === "sendblue") {
+      if (!secret || !secretMatches(req.headers["sb-signing-secret"], secret)) {
         app.log.warn({ headers: Object.keys(req.headers) }, "webhook rejected: bad secret");
         reply.code(401).send({ ok: false });
         return;
@@ -57,7 +58,38 @@ export function buildServer() {
     handleInbound(msg).catch((err) => app.log.error({ err }, "inbound failed"));
   });
 
-  // --- google calendar oauth ----------------------------------------------
+  // --- calendar -------------------------------------------------------------
+  app.get("/connect/calendar", async (req, reply) => {
+    const token = (req.query as { t?: string })?.t ?? "";
+    const payload = verifyLink(token);
+    if (!payload || payload.kind !== "calendar") {
+      return reply.type("text/html").send(notice("that link expired", "text piper and ask for a new one."));
+    }
+    const google = config.google.clientId ? `/connect/google?t=${encodeURIComponent(token)}` : null;
+    reply.type("text/html").send(calendarChooser(feedUrl(payload.uid), google));
+  });
+
+  // Polled by Apple Calendar (or any client) for a subscribed feed.
+  app.get("/cal/:file", async (req, reply) => {
+    const uid = verifyFeedToken((req.params as { file: string }).file.replace(/\.ics$/, ""));
+    if (!uid) return reply.code(404).send();
+    const [user] = await sql<User[]>`select * from users where id = ${uid}`;
+    if (!user) return reply.code(404).send();
+
+    const events = await sql<
+      { id: number; title: string; notes: string | null; starts_at: Date; ends_at: Date; created_at: Date }[]
+    >`select id, title, notes, starts_at, ends_at, created_at from calendar_events
+      where user_id = ${uid} and ends_at > now() - interval '60 days' order by starts_at`;
+
+    if (!user.calendar_feed_seen_at) {
+      await sql`update users set calendar_feed_seen_at = now() where id = ${uid}`;
+      const msg = "ok your calendar's hooked up, anything we plan lands there now";
+      await channel.send(user.phone, msg);
+      await sql`insert into messages (user_id, direction, body, proactive) values (${uid}, 'out', ${msg}, true)`;
+    }
+    reply.type("text/calendar; charset=utf-8").send(renderIcs(events));
+  });
+
   app.get("/connect/google", async (req, reply) => {
     const token = (req.query as { t?: string })?.t ?? "";
     const payload = verifyLink(token);

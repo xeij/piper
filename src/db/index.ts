@@ -17,6 +17,7 @@ export type User = {
   trial_ends_at: Date | null;
   stripe_customer_id: string | null;
   google_refresh_token: string | null;
+  calendar_feed_seen_at: Date | null;
   profile_doc: string;
   profile_doc_at: Date | null;
   style_profile: StyleProfile;

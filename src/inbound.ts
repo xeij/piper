@@ -2,7 +2,9 @@ import { config } from "./config.js";
 import { sql, type User } from "./db/index.js";
 import type { InboundMessage } from "./channels/index.js";
 import { channel } from "./channels/index.js";
-import { advanceStage } from "./onboarding.js";
+import { advanceStage, hasAccess, inboundCount, paywallState } from "./onboarding.js";
+import { createLink } from "./web/links.js";
+import { deliver } from "./outbound/send.js";
 
 const STOP_WORDS = new Set(["stop", "stopall", "unsubscribe", "cancel", "end", "quit"]);
 const START_WORDS = new Set(["start", "unstop", "yes"]);
@@ -76,6 +78,15 @@ export async function handleInbound(msg: InboundMessage): Promise<void> {
   // don't require the exact activation phrase to proceed; someone who typed it
   // slightly wrong should never dead-end.
   await advanceStage(user);
+
+  // Past the grace window, answer from code: no model call, no cost beyond delivery.
+  if (paywallState(await inboundCount(user.id), hasAccess(user)) === "gate") {
+    const link = createLink(user.id, "checkout", 7 * 24 * 60);
+    await deliver(user, [`ok your free messages are up. it's $19.99/mo to keep going, link's here: ${link}`], {
+      proactive: false,
+    });
+    return;
+  }
 
   // Each inbound pushes the deadline out, so a burst becomes one turn.
   await sql`
