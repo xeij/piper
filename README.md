@@ -41,10 +41,17 @@ statements.
 
 The server is one long-running Node process: the webhook server plus three
 polling workers (debounced turns, due follow-ups, the sweep). It needs a host
-that keeps it running continuously, not one that sleeps it when idle. It runs on
-Railway from this repo with no extra config: the build runs `npm run build`, the
-start command is `npm start`, and the health check is `/health`. Workers claim
-jobs with `FOR UPDATE SKIP LOCKED`, so more than one instance is safe.
+that keeps it running continuously, not one that sleeps it when idle, since
+scheduled follow-ups only fire while the process is up. Workers claim jobs with
+`FOR UPDATE SKIP LOCKED`, so more than one instance is safe.
+
+It runs on a single Oracle Cloud Always Free Ubuntu VM. `deploy/deploy.sh
+<ssh-host>` rsyncs the working tree and `.env.production` to the VM, and
+`deploy/remote.sh` installs Node 24 and Caddy on first run, opens ports 80/443
+in the host firewall, builds, and runs the app under systemd behind Caddy, which
+obtains the TLS certificate. Re-running the same command deploys new code. With
+no domain, `PUBLIC_BASE_URL=https://<ip-with-dashes>.sslip.io` gives a hostname
+Caddy can certify. Logs: `journalctl -u piper -f`.
 
 Required env vars: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `LINK_SIGNING_SECRET`
 (32+ random bytes), `PUBLIC_BASE_URL` (the deployed HTTPS URL),
