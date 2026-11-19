@@ -1,196 +1,59 @@
 # piper
 
-An AI accountability partner that lives in iMessage. It remembers goals people
-mention in conversation, checks in on them at the right time, and texts like a
-friend rather than a productivity app.
+An AI accountability partner that lives in iMessage. Text it what you're
+working on, and it remembers, checks in when it matters, and talks like a
+friend instead of an app.
 
-Stack: TypeScript on Node 20+, Fastify, Postgres (Supabase), Claude via the
-Anthropic SDK, Sendblue for iMessage (Twilio for SMS).
+No app to download and no account to make. The first text is the signup.
+
+## What it's like
+
+> **you:** trying to finish my ml homework by friday\
+> **piper:** how much is left\
+> **you:** the whole second half lol\
+> **piper:** ok so thursday is crunch time. i'll check on you wednesday night
+>
+> *wednesday, 8pm*
+>
+> **piper:** how's the ml homework, still the whole second half?
+
+(Illustrative exchange.)
+
+## What it does
+
+- Picks up goals from normal conversation, without forms or setup.
+- Remembers the people, plans and details you mention, and brings them up later.
+- Texts first only when there's a reason: a check-in it promised, or a goal
+  that's gone quiet. Otherwise it stays out of your messages.
+- Adapts to how you text: length, capitalization, emoji.
+- Puts plans on your Apple or Google Calendar.
+- First 12 messages are free, then it's a monthly subscription through Stripe.
+
+## How it's built
+
+```
+your iPhone ──iMessage──▶ Sendblue ──▶ piper server ──▶ Claude
+                                            │
+                                            ▼
+                                   Postgres (memory, goals)
+```
+
+TypeScript on Node, Fastify, Postgres on Supabase, Claude (Anthropic), Sendblue
+for iMessage, Stripe for billing. It runs as a single service on a small Linux
+VM.
 
 ## Status
 
-Early. Real iMessages flow end to end through Sendblue for a small number of
-testers. The message-count paywall, Stripe checkout and the Apple Calendar feed
-are implemented and covered by self-tests, but have not yet run against live
-Stripe payments or a public user base. The Twilio SMS fallback and Google
-Calendar OAuth have not been exercised against live accounts.
+Working end to end over iMessage and in testing with a small group. Billing and
+calendar sync are built and being tested before a public launch.
 
-## Quickstart
+## Running it locally
 
-Prerequisites: Node 20+, a Postgres database, an Anthropic API key. A Sendblue
-account is only needed for real texting; the simulator works without it.
+Requires Node 20+, a Postgres database and an Anthropic API key. Create a
+`.env` with `DATABASE_URL`, `ANTHROPIC_API_KEY` and `LINK_SIGNING_SECRET`, then:
 
 ```bash
 npm install
-cp .env.example .env      # fill in DATABASE_URL, ANTHROPIC_API_KEY, LINK_SIGNING_SECRET
-npm run db:push           # apply src/db/schema.sql
-npm run selftest          # pure-logic checks, no DB or network
-npm run sim -- +15550001111
+npm run db:push
+npm run sim -- +15550001111   # chat with piper in the terminal, no phone needed
 ```
-
-`npm run sim` runs the real prompt, memory, tools, and database from a terminal,
-with only the message transport stubbed. It prints per-turn latency and prompt
-cache hit rate. `/state` dumps what the agent knows about the user,
-`/followup <intent>` forces a proactive turn, and `/reset` wipes the sim user.
-
-With Supabase, use the **session pooler** connection string (port 5432). The
-direct connection is IPv6-only and the transaction pooler breaks prepared
-statements.
-
-### Deploying
-
-The server is one long-running Node process: the webhook server plus three
-polling workers (debounced turns, due follow-ups, the sweep). It needs a host
-that keeps it running continuously, not one that sleeps it when idle, since
-scheduled follow-ups only fire while the process is up. Workers claim jobs with
-`FOR UPDATE SKIP LOCKED`, so more than one instance is safe.
-
-It runs on a single Oracle Cloud Always Free Ubuntu VM. `deploy/deploy.sh
-<ssh-host>` rsyncs the working tree and `.env.production` to the VM, and
-`deploy/remote.sh` installs Node 24 and Caddy on first run, opens ports 80/443
-in the host firewall, builds, and runs the app under systemd behind Caddy, which
-obtains the TLS certificate. Re-running the same command deploys new code. With
-no domain, `PUBLIC_BASE_URL=https://<ip-with-dashes>.sslip.io` gives a hostname
-Caddy can certify. Logs: `journalctl -u piper -f`.
-
-Required env vars: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `LINK_SIGNING_SECRET`
-(32+ random bytes), `PUBLIC_BASE_URL` (the deployed HTTPS URL),
-`CHANNEL_PROVIDER`, the `SENDBLUE_*` values, and for billing `STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`. The
-Stripe webhook points at `<PUBLIC_BASE_URL>/webhooks/stripe` and needs
-`checkout.session.completed` and `customer.subscription.*` events. Run
-`npm run db:push` against the production database once per schema change.
-
-On Sendblue's free plan, only verified contacts can talk to the number. Opening
-it to the public requires a paid Sendblue line.
-
-### Real iMessage (local)
-
-1. Fill in `SENDBLUE_API_KEY`, `SENDBLUE_API_SECRET` and `SENDBLUE_FROM_NUMBER`
-   from the Sendblue dashboard, and set `SENDBLUE_WEBHOOK_SECRET` to any random
-   string.
-2. `npm run dev`, then expose it: `cloudflared tunnel --url http://localhost:3000`.
-   Set `PUBLIC_BASE_URL` to the tunnel URL.
-3. In Sendblue, under Developer → Webhooks → Inbound messages, add
-   `<PUBLIC_BASE_URL>/webhooks/inbound` with the same secret.
-4. Text the Sendblue number. On Sendblue's free plan a contact must message the
-   number first before the API can send to them.
-
-## How it works
-
-```
-iMessage → /webhooks/inbound → debounce (~3s) → agent turn → paced outbound
-                                                    │
-                       ┌────────────────────────────┼──────────────────────┐
-                schedule_followup             style profile            dossier
-                (agent's own tool)        (mirrors the user)     (Haiku, background)
-                       │
-                followup worker  ←  nightly sweep (Haiku decides whether to text at all)
-```
-
-Chat turns run on Claude Sonnet; background jobs (dossier rewrites, the nightly
-sweep) run on Haiku.
-
-**Inbound is debounced.** People text in bursts. Each message pushes
-`users.pending_turn_at` forward, and the agent only runs once the burst stops,
-so it never answers "hey" before the actual thought arrives.
-
-**Outbound is paced.** A typing indicator, then a delay proportional to reply
-length. Replies split on blank lines into separate bubbles, capped by
-`MAX_BUBBLES_PER_REPLY`.
-
-**Silence is a valid outcome.** The agent has a `stay_quiet` tool, and the
-nightly sweep defaults to not texting. A proactive message has to earn its
-send.
-
-**Voice is enforced in two places.** `src/agent/prompt.ts` sets the register
-(casual, lowercase, short, no markdown). Because models still slip, every
-outgoing reply also passes through `scrubAiTells()` in `src/agent/run.ts`,
-which strips em dashes, bold, headers and list markers. Style mirroring
-(`src/agent/style.ts`) adapts length, capitalization and emoji to the user's own
-texts.
-
-### Memory
-
-1. `messages`: raw append-only log.
-2. `goals`, `checkins`, `facts`: structured rows the agent writes through tools
-   and refers to by name ("how'd the thing with your manager go").
-3. `users.profile_doc`: a compact dossier Haiku rewrites from the last 80
-   messages, at most every 6 hours, after a reply has gone out. It is injected
-   into every prompt.
-
-There is no vector store. The context this product needs is almost always
-recent and salient rather than semantically similar, so a dossier beats
-retrieval on both quality and cost. `search_history` covers the rare lookup of
-something old.
-
-### Prompt caching
-
-`PIPER_CORE` is byte-identical for every user and cached with a 1-hour TTL, so
-one cache entry serves everyone. Nothing may be interpolated into it, and tool
-definitions (rendered before the system prompt) must stay byte-stable too.
-Per-user context goes after the cache breakpoint. The simulator reports
-`cache_read_input_tokens` to catch regressions.
-
-### Cost constraint
-
-Message delivery, not tokens, dominates cost. An iMessage relay charges per
-message, and on rough estimates it costs several times more per active user
-than the model calls do. Splitting a reply into bubbles makes it read as human
-and multiplies delivery cost, which is why bubble count and proactive sends per
-day are config values (`MAX_BUBBLES_PER_REPLY`, `MAX_PROACTIVE_PER_DAY`) rather
-than constants.
-
-### Paywall
-
-Billing is by usage, not time. Each number gets `FREE_MESSAGES` texts (default
-12) of normal conversation. After that the onboarding stage flips to
-`paywalled` and the agent asks them to subscribe, in its own voice, with a
-signed Stripe Checkout link. After `PAYWALL_GRACE` more texts, replies come from
-code instead (just the link), so a non-paying user costs one delivery per text
-and no model calls. Proactive texts stop at the paywall. Numbers in
-`FREE_PHONES` never pay. Stage is recomputed on every inbound, so a lapsed
-subscription returns to the paywall on its own.
-
-### Calendar
-
-iCloud has no OAuth API, and asking people to text an app-specific password is
-not acceptable, so Apple Calendar support is a subscription feed. Each user
-gets a private `webcal://…/cal/<uid>.<hmac>.ics` URL; events the agent creates
-go into `calendar_events` and appear in the user's Calendar app. The tradeoff is
-that the feed is one-way (Piper can add events but not read the user's schedule),
-and Apple controls how often it re-fetches the feed. Google Calendar is offered
-alongside it through OAuth with the `calendar.events` scope, which also allows
-reading. The first fetch of the feed confirms the connection in the text thread.
-
-### Channels
-
-Everything goes through the `Channel` interface in `src/channels/`.
-`CHANNEL_PROVIDER` switches between Sendblue (iMessage) and Twilio (SMS).
-iMessage relays operate outside Apple's terms and numbers can be revoked
-without notice, so the SMS path exists as a one-variable fallback.
-
-### Safety and compliance
-
-- STOP / START / HELP are handled in code (`src/inbound.ts`), never by the model.
-- The agent discloses that it is an AI when asked, and before any payment ask.
-- Self-harm, abuse, and disordered-eating signals make the prompt drop the
-  persona and point to crisis resources.
-- Inbound webhooks are rejected without the shared Sendblue secret.
-- Google Calendar access is limited to the `calendar.events` scope.
-
-## Layout
-
-| Path                    | Contents                                                    |
-| ----------------------- | ----------------------------------------------------------- |
-| `src/agent/prompt.ts`   | Voice rules, banned phrases, onboarding stage guidance      |
-| `src/agent/run.ts`      | Agent loop, cache breakpoints, bubble splitting and scrubbing |
-| `src/agent/tools.ts`    | Goals, check-ins, facts, follow-ups, calendar, links        |
-| `src/onboarding.ts`     | Stage machine and paywall decision                          |
-| `src/integrations/`     | Stripe Checkout, Google Calendar, Apple Calendar `.ics` feed |
-| `src/agent/style.ts`    | Texting style derived from the user's own messages          |
-| `src/memory/profile.ts` | Dossier regeneration                                        |
-| `src/channels/`         | `Channel` interface, Sendblue and Twilio implementations    |
-| `src/workers/`          | Debounced turns, due follow-ups, nightly sweep              |
-| `src/db/schema.sql`     | Full schema                                                 |
-| `src/sim.ts`            | Terminal simulator                                          |
